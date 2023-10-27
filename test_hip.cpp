@@ -3,70 +3,128 @@
 #include <stdio.h>
 
 // Size of array
-#define N 256 * 80 * 16
+#define N 128 * 80 * 16
 
-#define WARM_UP_LOOP 200
-#define KERNEL_LOOP 100
-#define KERNEL_INNER_REPEAT 10000
+#define WARM_UP_LOOP 100
+#define KERNEL_LOOP 10
+#define KERNEL_INNER_REPEAT 1000
+
+const int thr_per_blk = 128;
+const int blk_in_grid = ceil(double(N) / thr_per_blk);
 
 enum share_read {
-  no_conflict,
+  normal,
   boardcast,
-  multicast,
+  multicast_2_way,
+  multicast_4_way,
+  multicast_8_way,
+  multicast_16_way,
   conflict_2_way,
   conflict_4_way,
   conflict_8_way,
   conflict_16_way
 };
 
-#define MTYPE float
-#define MAKE_MTYPE(x) (x)
-#define GET_MTYPE(x) (x)
+#define HOST_DEVICE_INLINE __host__ __device__ __forceinline__
 
-// #define MTYPE float2
-// #define MAKE_MTYPE(x) make_float2(x, x)
-// #define GET_MTYPE(v) (v.x)
+template <typename T> HOST_DEVICE_INLINE T MAKE_MTYPE(const float &v) {
+  if constexpr (std::is_same_v<T, float>)
+    return v;
+  else if constexpr (std::is_same_v<T, float2>)
+    return make_float2(v, v);
+  else if constexpr (std::is_same_v<T, float4>)
+    return make_float4(v, v, v, v);
+  else
+    static_assert("Unsupported type T in MAKE_MTYPE");
+}
 
-// #define MTYPE float4
-// #define MAKE_MTYPE(x) make_float4(x, x, x, x)
-// #define GET_MTYPE(v) (v.x)
+template <typename T> HOST_DEVICE_INLINE float GET_MTYPE(const T &v) {
+  if constexpr (std::is_same_v<T, float>)
+    return v;
+  else if constexpr (std::is_same_v<T, float2>)
+    return v.x * v.y;
+  else if constexpr (std::is_same_v<T, float4>)
+    return v.x * v.y * v.z * v.w;
+  else
+    static_assert("Unsupported type T in MAKE_MTYPE");
+}
 
 // Kernel
-template <int choose> __global__ void add_vectors(float *a) {
-  const int ITEMS = 8;
-  __shared__ MTYPE shm[ITEMS][256];
+template <int choose, typename MTYPE> __global__ void add_vectors(float *a) {
+  const int len = 1024 * sizeof(float4) / sizeof(MTYPE);
+  __shared__ MTYPE shm[len];
   int id = blockDim.x * blockIdx.x + threadIdx.x;
 
-  for (int i = 0; i < ITEMS; i++)
-    shm[i][threadIdx.x] = MAKE_MTYPE(a[id]);
+  for (int i = threadIdx.x; i < len; i += blockDim.x)
+    shm[i] = MAKE_MTYPE<MTYPE>(a[id]);
 
+  MTYPE sum = MAKE_MTYPE<MTYPE>(0);
+#pragma nounroll
   for (int i = 0; i < KERNEL_INNER_REPEAT; i++) {
-    MTYPE sum = MAKE_MTYPE(0);
-    for (int j = 0; j < ITEMS; j++) {
-      if constexpr (choose == no_conflict) {
-        sum += shm[j][(threadIdx.x + 1) % 256];
+    for (int j = 0; j < 256; j++) {
+      if constexpr (choose == normal) {
+        sum += shm[threadIdx.x + j];
       } else if constexpr (choose == boardcast) {
-        sum += shm[j][threadIdx.x / 32];
-      } else if constexpr (choose == multicast) {
-        sum += shm[j][threadIdx.x / 4];
+        sum += shm[threadIdx.x / 32 + j];
+      } else if constexpr (choose == multicast_2_way) {
+        sum += shm[threadIdx.x / 2 + j];
+      } else if constexpr (choose == multicast_4_way) {
+        sum += shm[threadIdx.x / 4 + j];
+      } else if constexpr (choose == multicast_8_way) {
+        sum += shm[threadIdx.x / 8 + j];
+      } else if constexpr (choose == multicast_16_way) {
+        sum += shm[threadIdx.x / 16 + j];
       } else if constexpr (choose == conflict_2_way) {
         // 0->0, 1->32, 2->1, 3->33
-        sum += shm[j][((threadIdx.x % 2) * 32) + threadIdx.x / 2];
+        sum += shm[((threadIdx.x % 2) * 32) + threadIdx.x / 2 + j];
       } else if constexpr (choose == conflict_4_way) {
-        // 0->0, 1->32, 2->64, 3->128;
-        // 4->1, 5->33, 6->65, 7->129;
-        sum += shm[j][((threadIdx.x % 4) * 32) + threadIdx.x / 4];
+        // 0->0, 1->32, 2->64, 3->128; 4->1, 5->33, 6->65, 7->129;
+        sum += shm[((threadIdx.x % 4) * 32) + threadIdx.x / 4 + j];
       } else if constexpr (choose == conflict_8_way) {
-        sum += shm[j][((threadIdx.x % 8) * 32) + threadIdx.x / 8];
-      } 
-      // else if constexpr (choose == conflict_16_way) {
-      //   sum += shm[j][((threadIdx.x % 16) * 32) + threadIdx.x / 16];
-      // }
+        sum += shm[((threadIdx.x % 8) * 32) + threadIdx.x / 8 + j];
+      } else if constexpr (choose == conflict_16_way) {
+        sum += shm[((threadIdx.x % 16) * 32) + threadIdx.x / 16 + j];
+      }
     }
-    shm[i % ITEMS][threadIdx.x] = sum;
+    shm[threadIdx.x + i % 256] = sum;
   }
 
-  a[id] = GET_MTYPE(shm[0][threadIdx.x]);
+  a[id] = GET_MTYPE(sum);
+}
+
+template <int choose, typename MTYPE>
+void kernel_run(float *A, float *d_A, size_t bytes, const char *method) {
+  hipMemcpy(d_A, A, bytes, hipMemcpyHostToDevice);
+  float time_elapsed = 0;
+  hipEvent_t start, stop;
+  hipEventCreate(&start); // 创建Event
+  hipEventCreate(&stop);
+
+  hipEventRecord(start, 0);
+  for (int i = 0; i < KERNEL_LOOP; i++) {
+    add_vectors<choose, MTYPE><<<blk_in_grid, thr_per_blk>>>(d_A);
+  }
+  hipEventRecord(stop, 0);
+  hipEventSynchronize(start); // Waits for an event to complete.
+  hipEventSynchronize(stop); // Waits for an event to complete.Record之前的任务
+  hipEventElapsedTime(&time_elapsed, start, stop); // 计算时间差
+  printf("%s: time %f(ms)\n", method, time_elapsed);
+}
+
+template <typename MTYPE> void run(float *A, float *d_A, size_t bytes) {
+
+  kernel_run<normal, MTYPE>(A, d_A, bytes, "normal(tx)\t\t");
+  kernel_run<multicast_2_way, MTYPE>(A, d_A, bytes, "multicast_2_way(tx/2)\t\t");
+  kernel_run<multicast_4_way, MTYPE>(A, d_A, bytes, "multicast_4_way(tx/4)\t\t");
+  kernel_run<multicast_8_way, MTYPE>(A, d_A, bytes, "multicast_8_way(tx/8)\t\t");
+  kernel_run<multicast_16_way, MTYPE>(A, d_A, bytes, "multicast_16_way(tx/16)\t\t");
+  kernel_run<boardcast, MTYPE>(A, d_A, bytes, "boardcast(tx/32)\t\t");
+  kernel_run<conflict_2_way, MTYPE>(A, d_A, bytes, "conflict_2_way( (tx%2) * 32 + tx/2 )\t\t");
+  kernel_run<conflict_4_way, MTYPE>(A, d_A, bytes, "conflict_4_way( (tx%4) * 32 + tx/4 )\t\t");
+  kernel_run<conflict_8_way, MTYPE>(A, d_A, bytes, "conflict_8_way( (tx%8) * 32 + tx/8 )\t\t");
+  kernel_run<conflict_16_way, MTYPE>(A, d_A, bytes, "conflict_16_way( (tx%16) * 32 + tx/16 )\t\t");
+
+  hipMemcpy(A, d_A, bytes, hipMemcpyDeviceToHost);
 }
 
 // Main program
@@ -84,102 +142,21 @@ int main() {
 
   hipMemcpy(d_A, A, bytes, hipMemcpyHostToDevice);
 
-  int thr_per_blk = 256;
-  int blk_in_grid = ceil(double(N) / thr_per_blk);
-
   printf("warm up\n");
   // warm up
   for (int i = 0; i < WARM_UP_LOOP; i++) {
-    add_vectors<no_conflict><<<blk_in_grid, thr_per_blk>>>(d_A);
+    add_vectors<normal, float><<<blk_in_grid, thr_per_blk>>>(d_A);
   }
   hipDeviceSynchronize();
   printf("finish warm up\n");
 
-  hipMemcpy(d_A, A, bytes, hipMemcpyHostToDevice);
-  float time_elapsed = 0;
-  hipEvent_t start, stop;
-  hipEventCreate(&start); // 创建Event
-  hipEventCreate(&stop);
+  printf("\nfloat\n");
+  run<float>(A, d_A, bytes);
+  printf("\nfloat2\n");
+  run<float2>(A, d_A, bytes);
+  printf("\nfloat4\n");
+  run<float4>(A, d_A, bytes);
 
-  hipEventRecord(start, 0);
-  for (int i = 0; i < KERNEL_LOOP; i++) {
-    add_vectors<no_conflict><<<blk_in_grid, thr_per_blk>>>(d_A);
-  }
-  hipEventRecord(stop, 0);
-  hipEventSynchronize(start); // Waits for an event to complete.
-  hipEventSynchronize(stop); // Waits for an event to complete.Record之前的任务
-  hipEventElapsedTime(&time_elapsed, start, stop); // 计算时间差
-  printf("no_conflict: time %f(ms)\n", time_elapsed);
-  hipMemcpy(d_A, A, bytes, hipMemcpyHostToDevice);
-
-  hipEventRecord(start, 0);
-  for (int i = 0; i < KERNEL_LOOP; i++) {
-    add_vectors<boardcast><<<blk_in_grid, thr_per_blk>>>(d_A);
-  }
-  hipEventRecord(stop, 0);
-  hipEventSynchronize(start); // Waits for an event to complete.
-  hipEventSynchronize(stop); // Waits for an event to complete.Record之前的任务
-  hipEventElapsedTime(&time_elapsed, start, stop); // 计算时间差
-  printf("boardcast time %f(ms)\n", time_elapsed);
-
-  hipMemcpy(d_A, A, bytes, hipMemcpyHostToDevice);
-  hipEventRecord(start, 0);
-  for (int i = 0; i < KERNEL_LOOP; i++) {
-    add_vectors<multicast><<<blk_in_grid, thr_per_blk>>>(d_A);
-  }
-  hipEventRecord(stop, 0);
-  hipEventSynchronize(start); // Waits for an event to complete.
-  hipEventSynchronize(stop); // Waits for an event to complete.Record之前的任务
-  hipEventElapsedTime(&time_elapsed, start, stop); // 计算时间差
-  printf("multicast time %f(ms)\n", time_elapsed);
-
-  hipMemcpy(d_A, A, bytes, hipMemcpyHostToDevice);
-  hipEventRecord(start, 0);
-  for (int i = 0; i < KERNEL_LOOP; i++) {
-    add_vectors<conflict_2_way><<<blk_in_grid, thr_per_blk>>>(d_A);
-  }
-  hipEventRecord(stop, 0);
-  hipEventSynchronize(start); // Waits for an event to complete.
-  hipEventSynchronize(stop); // Waits for an event to complete.Record之前的任务
-  hipEventElapsedTime(&time_elapsed, start, stop); // 计算时间差
-  printf("conflict_2_way time %f(ms)\n", time_elapsed);
-
-  hipMemcpy(d_A, A, bytes, hipMemcpyHostToDevice);
-  hipEventRecord(start, 0);
-  for (int i = 0; i < KERNEL_LOOP; i++) {
-    add_vectors<conflict_4_way><<<blk_in_grid, thr_per_blk>>>(d_A);
-  }
-  hipEventRecord(stop, 0);
-  hipEventSynchronize(start); // Waits for an event to complete.
-  hipEventSynchronize(stop); // Waits for an event to complete.Record之前的任务
-  hipEventElapsedTime(&time_elapsed, start, stop); // 计算时间差
-  printf("conflict_4_way time %f(ms)\n", time_elapsed);
-
-  hipMemcpy(d_A, A, bytes, hipMemcpyHostToDevice);
-  hipEventRecord(start, 0);
-  for (int i = 0; i < KERNEL_LOOP; i++) {
-    add_vectors<conflict_8_way><<<blk_in_grid, thr_per_blk>>>(d_A);
-  }
-  hipEventRecord(stop, 0);
-  hipEventSynchronize(start); // Waits for an event to complete.
-  hipEventSynchronize(stop); // Waits for an event to complete.Record之前的任务
-  hipEventElapsedTime(&time_elapsed, start, stop); // 计算时间差
-  printf("conflict_8_way time %f(ms)\n", time_elapsed);
-
-  // hipMemcpy(d_A, A, bytes, hipMemcpyHostToDevice);
-  // hipEventRecord(start, 0);
-  // for (int i = 0; i < KERNEL_LOOP; i++) {
-  //   add_vectors<conflict_16_way><<<blk_in_grid, thr_per_blk>>>(d_A);
-  // }
-  // hipEventRecord(stop, 0);
-  // hipEventSynchronize(start); // Waits for an event to complete.
-  // hipEventSynchronize(stop); // Waits for an event to complete.Record之前的任务
-  // hipEventElapsedTime(&time_elapsed, start, stop); // 计算时间差
-  // printf("conflict_16_way time %f(ms)\n", time_elapsed);
-
-  hipMemcpy(A, d_A, bytes, hipMemcpyDeviceToHost);
-
-  hipMemcpy(A, d_A, bytes, hipMemcpyDeviceToHost);
   // Free CPU memory
   free(A);
 

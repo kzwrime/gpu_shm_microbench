@@ -1,41 +1,101 @@
 # gpu_shm_microbench
 
-Default items_per_thread=8, which means 8 read + 8 add + 1 write, mainly reflects the reading performance of shared memory.
+This benchmark mainly reflects the reading bandwidth of shared memory.
 
 ## Overview
 
+The tables show the time(ms) cost of each case.
+
 float(b32)
 
-|                | a100     | v100     | mi50*    |
-| -------------- | -------- | -------- | -------- |
-| no_conflict    | 658.3846 | 800.3199 | 1335.369 |
-| boardcast      | 620.4108 | 802.95   | 1329.768 |
-| multicast      | 620.5339 | 802.8201 | 1329.622 |
-| conflict_2_way | 1159.872 | 1513.676 | 2218.167 |
-| conflict_4_way | 2249.229 | 2946.2   | 4279.984 |
-| conflict_8_way | 4429.086 | 5798.598 | 8421.638 |
+|                                         | a100    | v100    | mi50*   |
+| --------------------------------------- | ------- | ------- | ------- |
+| normal(tx)                              | 97.67   | 109.48  | 186.33  |
+| multicast_2_way(tx/2)                   | 100.29  | 110.12  | 187.21  |
+| multicast_4_way(tx/4)                   | 88.39   | 109.48  | 187.57  |
+| multicast_8_way(tx/8)                   | 88.49   | 109.47  | 188.02  |
+| multicast_16_way(tx/16)                 | 88.57   | 109.48  | 186.71  |
+| boardcast(tx/32)                        | 88.58   | 109.47  | 187.81  |
+| conflict_2_way( (tx%2) * 32 + tx/2 )    | 174.89  | 218.42  | 350.64  |
+| conflict_4_way( (tx%4) * 32 + tx/4 )    | 349.27  | 454.38  | 699.11  |
+| conflict_8_way( (tx%8) * 32 + tx/8 )    | 698.27  | 923.58  | 1394.66 |
+| conflict_16_way( (tx%16) * 32 + tx/16 ) | 1395.27 | 1846.68 | 2784.43 |
 
 float2(b64)
 
-|                | a100     | v100     | mi50*    |
-| -------------- | -------- | -------- | -------- |
-| no_conflict    | 1290.588 | 1733.207 | 2474.466 |
-| boardcast      | 688.8486 | 942.9678 | 2475.849 |
-| multicast      | 688.9868 | 948.5419 | 2475.404 |
-| conflict_2_way | 2318.283 | 3234.857 | 4441.515 |
-| conflict_4_way | 4495.824 | 6347.18  | 8558.571 |
-| conflict_8_way | 8858.317 | 12710.63 | 16831.07 |
+|                                         | a100    | v100    | mi50*   |
+| --------------------------------------- | ------- | ------- | ------- |
+| normal(tx)                              | 186.98  | 222.72  | 357.44  |
+| multicast_2_way(tx/2)                   | 119.28  | 141.55  | 356.58  |
+| multicast_4_way(tx/4)                   | 110.79  | 141.42  | 355.23  |
+| multicast_8_way(tx/8)                   | 108.39  | 140.83  | 355.87  |
+| multicast_16_way(tx/16)                 | 108.47  | 140.76  | 356.78  |
+| boardcast(tx/32)                        | 108.47  | 141.52  | 354.98  |
+| conflict_2_way( (tx%2) * 32 + tx/2 )    | 349.93  | 436.79  | 668.62  |
+| conflict_4_way( (tx%4) * 32 + tx/4 )    | 698.38  | 883.00  | 1339.57 |
+| conflict_8_way( (tx%8) * 32 + tx/8 )    | 1395.65 | 1836.83 | 2690.85 |
+| conflict_16_way( (tx%16) * 32 + tx/16 ) | 2790.90 | 3693.49 | 5359.26 |
 
 float4(b128)
 
-|                | a100     | v100     | mi50*    |
-| -------------- | -------- | -------- | -------- |
-| no_conflict    | 2575.202 | 3265.734 | 4612.925 |
-| boardcast      | 1370.866 | 1713.209 | 4616.237 |
-| multicast      | 1370.973 | 1855.482 | 4614.917 |
-| conflict_2_way | 4640.534 | 6222.208 | 8868.114 |
-| conflict_4_way | 8996.727 | 11784.03 | 17139.82 |
-| conflict_8_way | 17716.83 | 22991.49 | 17139.83 |
+|                                         | a100    | v100    | mi50*   |
+| --------------------------------------- | ------- | ------- | ------- |
+| normal(tx)                              | 375.11  | 453.53  | 715.56  |
+| multicast_2_way(tx/2)                   | 214.08  | 263.57  | 715.16  |
+| multicast_4_way(tx/4)                   | 204.77  | 263.54  | 716.34  |
+| multicast_8_way(tx/8)                   | 194.95  | 263.80  | 715.64  |
+| multicast_16_way(tx/16)                 | 191.59  | 263.69  | 715.70  |
+| boardcast(tx/32)                        | 191.94  | 263.74  | 714.45  |
+| conflict_2_way( (tx%2) * 32 + tx/2 )    | 699.18  | 873.59  | 1333.72 |
+| conflict_4_way( (tx%4) * 32 + tx/4 )    | 1396.44 | 1817.17 | 2667.13 |
+| conflict_8_way( (tx%8) * 32 + tx/8 )    | 2791.13 | 3694.27 | 2668.34 |
+| conflict_16_way( (tx%16) * 32 + tx/16 ) | 2791.60 | 3694.27 | 2666.15 |
+
+## Kernel
+
+```cpp
+// Kernel
+template <int choose, typename MTYPE> __global__ void add_vectors(float *a) {
+  const int len = 1024 * sizeof(float4) / sizeof(MTYPE);
+  __shared__ MTYPE shm[len];
+  int id = blockDim.x * blockIdx.x + threadIdx.x;
+
+  for (int i = threadIdx.x; i < len; i += blockDim.x)
+    shm[i] = MAKE_MTYPE<MTYPE>(a[id]);
+
+  MTYPE sum = MAKE_MTYPE<MTYPE>(0);
+  for (int i = 0; i < KERNEL_INNER_REPEAT; i++) {
+    for (int j = 0; j < 256; j++) {
+      if constexpr (choose == normal) {
+        sum += shm[threadIdx.x + j];
+      } else if constexpr (choose == boardcast) {
+        sum += shm[threadIdx.x / 32 + j];
+      } else if constexpr (choose == multicast_2_way) {
+        sum += shm[threadIdx.x / 2 + j];
+      } else if constexpr (choose == multicast_4_way) {
+        sum += shm[threadIdx.x / 4 + j];
+      } else if constexpr (choose == multicast_8_way) {
+        sum += shm[threadIdx.x / 8 + j];
+      } else if constexpr (choose == multicast_16_way) {
+        sum += shm[threadIdx.x / 16 + j];
+      } else if constexpr (choose == conflict_2_way) {
+        // 0->0, 1->32, 2->1, 3->33
+        sum += shm[((threadIdx.x % 2) * 32) + threadIdx.x / 2 + j];
+      } else if constexpr (choose == conflict_4_way) {
+        // 0->0, 1->32, 2->64, 3->128; 4->1, 5->33, 6->65, 7->129;
+        sum += shm[((threadIdx.x % 4) * 32) + threadIdx.x / 4 + j];
+      } else if constexpr (choose == conflict_8_way) {
+        sum += shm[((threadIdx.x % 8) * 32) + threadIdx.x / 8 + j];
+      } else if constexpr (choose == conflict_16_way) {
+        sum += shm[((threadIdx.x % 16) * 32) + threadIdx.x / 16 + j];
+      }
+    }
+    shm[threadIdx.x + i % 256] = sum;
+  }
+
+  a[id] = GET_MTYPE(sum);
+}
+```
 
 ## CUDA
 
@@ -46,69 +106,87 @@ nvcc test_cuda.cu -std=c++17 -O3
 V100 output
 
 ```
-# float
 warm up
 finish warm up
-no_conflict: time 800.319946(ms)
-boardcast time 802.950012(ms)
-multicast time 802.820129(ms)
-conflict_2_way time 1513.675659(ms)
-conflict_4_way time 2946.200439(ms)
-conflict_8_way time 5798.598145(ms)
 
-#float2
-warm up
-finish warm up
-no_conflict: time 1733.207153(ms)
-boardcast time 942.967834(ms)
-multicast time 948.541870(ms)
-conflict_2_way time 3234.857178(ms)
-conflict_4_way time 6347.179688(ms)
-conflict_8_way time 12710.625000(ms)
+float
+normal(tx)              : time 109.481628(ms)
+multicast_2_way(tx/2)           : time 110.128319(ms)
+multicast_4_way(tx/4)           : time 109.484962(ms)
+multicast_8_way(tx/8)           : time 109.478592(ms)
+multicast_16_way(tx/16)         : time 109.485603(ms)
+boardcast(tx/32)                : time 109.479713(ms)
+conflict_2_way( (tx%2) * 32 + tx/2 )            : time 218.427490(ms)
+conflict_4_way( (tx%4) * 32 + tx/4 )            : time 454.384857(ms)
+conflict_8_way( (tx%8) * 32 + tx/8 )            : time 923.581299(ms)
+conflict_16_way( (tx%16) * 32 + tx/16 )         : time 1846.681763(ms)
 
-#float4
-warm up
-finish warm up
-no_conflict: time 3265.734131(ms)
-boardcast time 1713.209106(ms)
-multicast time 1855.482422(ms)
-conflict_2_way time 6222.208496(ms)
-conflict_4_way time 11784.026367(ms)
-conflict_8_way time 22991.486328(ms)
+float2
+normal(tx)              : time 222.728546(ms)
+multicast_2_way(tx/2)           : time 141.557220(ms)
+multicast_4_way(tx/4)           : time 141.428391(ms)
+multicast_8_way(tx/8)           : time 140.837311(ms)
+multicast_16_way(tx/16)         : time 140.760391(ms)
+boardcast(tx/32)                : time 141.527161(ms)
+conflict_2_way( (tx%2) * 32 + tx/2 )            : time 436.794525(ms)
+conflict_4_way( (tx%4) * 32 + tx/4 )            : time 883.005554(ms)
+conflict_8_way( (tx%8) * 32 + tx/8 )            : time 1836.837158(ms)
+conflict_16_way( (tx%16) * 32 + tx/16 )         : time 3693.496094(ms)
+
+float4
+normal(tx)              : time 453.532318(ms)
+multicast_2_way(tx/2)           : time 263.572845(ms)
+multicast_4_way(tx/4)           : time 263.549133(ms)
+multicast_8_way(tx/8)           : time 263.802734(ms)
+multicast_16_way(tx/16)         : time 263.692383(ms)
+boardcast(tx/32)                : time 263.745270(ms)
+conflict_2_way( (tx%2) * 32 + tx/2 )            : time 873.591675(ms)
+conflict_4_way( (tx%4) * 32 + tx/4 )            : time 1817.176270(ms)
+conflict_8_way( (tx%8) * 32 + tx/8 )            : time 3694.271729(ms)
+conflict_16_way( (tx%16) * 32 + tx/16 )         : time 3694.278320(ms)
 ```
 
 A100 output
 
 ```
-#float
 warm up
 finish warm up
-no_conflict: time 658.384644(ms)
-boardcast time 620.410828(ms)
-multicast time 620.533875(ms)
-conflict_2_way time 1159.872314(ms)
-conflict_4_way time 2249.229492(ms)
-conflict_8_way time 4429.085938(ms)
 
-#float2
-warm up
-finish warm up
-no_conflict: time 1290.588135(ms)
-boardcast time 688.848572(ms)
-multicast time 688.986755(ms)
-conflict_2_way time 2318.283447(ms)
-conflict_4_way time 4495.824219(ms)
-conflict_8_way time 8858.317383(ms)
+float
+normal(tx)              : time 97.675133(ms)
+multicast_2_way(tx/2)           : time 100.294403(ms)
+multicast_4_way(tx/4)           : time 88.396927(ms)
+multicast_8_way(tx/8)           : time 88.495743(ms)
+multicast_16_way(tx/16)         : time 88.577667(ms)
+boardcast(tx/32)                : time 88.583649(ms)
+conflict_2_way( (tx%2) * 32 + tx/2 )            : time 174.897797(ms)
+conflict_4_way( (tx%4) * 32 + tx/4 )            : time 349.275146(ms)
+conflict_8_way( (tx%8) * 32 + tx/8 )            : time 698.276184(ms)
+conflict_16_way( (tx%16) * 32 + tx/16 )         : time 1395.270386(ms)
 
-#float4
-warm up
-finish warm up
-no_conflict: time 2575.201904(ms)
-boardcast time 1370.865723(ms)
-multicast time 1370.972778(ms)
-conflict_2_way time 4640.534180(ms)
-conflict_4_way time 8996.726562(ms)
-conflict_8_way time 17716.828125(ms
+float2
+normal(tx)              : time 186.980057(ms)
+multicast_2_way(tx/2)           : time 119.285027(ms)
+multicast_4_way(tx/4)           : time 110.794403(ms)
+multicast_8_way(tx/8)           : time 108.392670(ms)
+multicast_16_way(tx/16)         : time 108.477699(ms)
+boardcast(tx/32)                : time 108.473373(ms)
+conflict_2_way( (tx%2) * 32 + tx/2 )            : time 349.934998(ms)
+conflict_4_way( (tx%4) * 32 + tx/4 )            : time 698.380371(ms)
+conflict_8_way( (tx%8) * 32 + tx/8 )            : time 1395.652466(ms)
+conflict_16_way( (tx%16) * 32 + tx/16 )         : time 2790.907471(ms)
+
+float4
+normal(tx)              : time 375.114868(ms)
+multicast_2_way(tx/2)           : time 214.085403(ms)
+multicast_4_way(tx/4)           : time 204.778366(ms)
+multicast_8_way(tx/8)           : time 194.950302(ms)
+multicast_16_way(tx/16)         : time 191.595230(ms)
+boardcast(tx/32)                : time 191.947174(ms)
+conflict_2_way( (tx%2) * 32 + tx/2 )            : time 699.181763(ms)
+conflict_4_way( (tx%4) * 32 + tx/4 )            : time 1396.447021(ms)
+conflict_8_way( (tx%8) * 32 + tx/8 )            : time 2791.133545(ms)
+conflict_16_way( (tx%16) * 32 + tx/16 )         : time 2791.607666(ms)
 ```
 
 ## ROCM
@@ -119,35 +197,44 @@ hipcc test_hip.cpp -std=c++17 -O3
 
 MI50 plus output
 ```
-#float
 warm up
 finish warm up
-no_conflict: time 1335.369141(ms)
-boardcast time 1329.768433(ms)
-multicast time 1329.622192(ms)
-conflict_2_way time 2218.166504(ms)
-conflict_4_way time 4279.983887(ms)
-conflict_8_way time 8421.637695(ms)
 
-#float2
-warm up
-finish warm up
-no_conflict: time 2474.466309(ms)
-boardcast time 2475.849121(ms)
-multicast time 2475.404053(ms)
-conflict_2_way time 4441.515137(ms)
-conflict_4_way time 8558.571289(ms)
-conflict_8_way time 16831.074219(ms)
+float
+normal(tx)              : time 186.338531(ms)
+multicast_2_way(tx/2)           : time 187.210205(ms)
+multicast_4_way(tx/4)           : time 187.570526(ms)
+multicast_8_way(tx/8)           : time 188.026215(ms)
+multicast_16_way(tx/16)         : time 186.719330(ms)
+boardcast(tx/32)                : time 187.811646(ms)
+conflict_2_way( (tx%2) * 32 + tx/2 )            : time 350.648102(ms)
+conflict_4_way( (tx%4) * 32 + tx/4 )            : time 699.119324(ms)
+conflict_8_way( (tx%8) * 32 + tx/8 )            : time 1394.666992(ms)
+conflict_16_way( (tx%16) * 32 + tx/16 )         : time 2784.430420(ms)
 
-#float4
-warm up
-finish warm up
-no_conflict: time 4612.925293(ms)
-boardcast time 4616.236816(ms)
-multicast time 4614.916504(ms)
-conflict_2_way time 8868.114258(ms)
-conflict_4_way time 17139.820312(ms)
-conflict_8_way time 17139.826172(ms)
+float2
+normal(tx)              : time 357.445068(ms)
+multicast_2_way(tx/2)           : time 356.587769(ms)
+multicast_4_way(tx/4)           : time 355.234497(ms)
+multicast_8_way(tx/8)           : time 355.877991(ms)
+multicast_16_way(tx/16)         : time 356.783905(ms)
+boardcast(tx/32)                : time 354.982300(ms)
+conflict_2_way( (tx%2) * 32 + tx/2 )            : time 668.626587(ms)
+conflict_4_way( (tx%4) * 32 + tx/4 )            : time 1339.570923(ms)
+conflict_8_way( (tx%8) * 32 + tx/8 )            : time 2690.853271(ms)
+conflict_16_way( (tx%16) * 32 + tx/16 )         : time 5359.263184(ms)
+
+float4
+normal(tx)              : time 715.567261(ms)
+multicast_2_way(tx/2)           : time 715.163635(ms)
+multicast_4_way(tx/4)           : time 716.343140(ms)
+multicast_8_way(tx/8)           : time 715.644043(ms)
+multicast_16_way(tx/16)         : time 715.702942(ms)
+boardcast(tx/32)                : time 714.454590(ms)
+conflict_2_way( (tx%2) * 32 + tx/2 )            : time 1333.729370(ms)
+conflict_4_way( (tx%4) * 32 + tx/4 )            : time 2667.139404(ms)
+conflict_8_way( (tx%8) * 32 + tx/8 )            : time 2668.341309(ms)
+conflict_16_way( (tx%16) * 32 + tx/16 )         : time 2666.159424(ms)
 ```
 
 ## ASM
