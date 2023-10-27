@@ -4,6 +4,8 @@ Default items_per_thread=8, which means 8 read + 8 add + 1 write, mainly reflect
 
 ## Overview
 
+float(b32)
+
 |                | a100     | v100     | mi50*    |
 | -------------- | -------- | -------- | -------- |
 | no_conflict    | 658.3846 | 800.3199 | 1335.369 |
@@ -13,6 +15,8 @@ Default items_per_thread=8, which means 8 read + 8 add + 1 write, mainly reflect
 | conflict_4_way | 2249.229 | 2946.2   | 4279.984 |
 | conflict_8_way | 4429.086 | 5798.598 | 8421.638 |
 
+float2(b64)
+
 |                | a100     | v100     | mi50*    |
 | -------------- | -------- | -------- | -------- |
 | no_conflict    | 1290.588 | 1733.207 | 2474.466 |
@@ -21,6 +25,8 @@ Default items_per_thread=8, which means 8 read + 8 add + 1 write, mainly reflect
 | conflict_2_way | 2318.283 | 3234.857 | 4441.515 |
 | conflict_4_way | 4495.824 | 6347.18  | 8558.571 |
 | conflict_8_way | 8858.317 | 12710.63 | 16831.07 |
+
+float4(b128)
 
 |                | a100     | v100     | mi50*    |
 | -------------- | -------- | -------- | -------- |
