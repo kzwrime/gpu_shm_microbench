@@ -21,7 +21,7 @@ enum share_read {
 
 // Kernel
 template <int choose> __global__ void add_vectors(float *a) {
-  const int ITEMS = 8;
+  const int ITEMS = 1;
   __shared__ float shm[ITEMS][512];
   int id = blockDim.x * blockIdx.x + threadIdx.x;
 
