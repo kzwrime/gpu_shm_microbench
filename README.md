@@ -11,29 +11,69 @@ nvcc test_cuda.cu -std=c++17 -O3
 V100 output
 
 ```
+# float
 warm up
 finish warm up
-no_conflict: time 850.027893(ms)
-boardcast time 857.593018(ms)
-multicast time 856.612244(ms)
-conflict_2_way time 1629.663208(ms)
-conflict_4_way time 3162.770752(ms)
-conflict_8_way time 6319.376953(ms)
-conflict_16_way time 12723.411133(ms)
+no_conflict: time 800.319946(ms)
+boardcast time 802.950012(ms)
+multicast time 802.820129(ms)
+conflict_2_way time 1513.675659(ms)
+conflict_4_way time 2946.200439(ms)
+conflict_8_way time 5798.598145(ms)
+
+#float2
+warm up
+finish warm up
+no_conflict: time 1733.207153(ms)
+boardcast time 942.967834(ms)
+multicast time 948.541870(ms)
+conflict_2_way time 3234.857178(ms)
+conflict_4_way time 6347.179688(ms)
+conflict_8_way time 12710.625000(ms)
+
+#float4
+warm up
+finish warm up
+no_conflict: time 3265.734131(ms)
+boardcast time 1713.209106(ms)
+multicast time 1855.482422(ms)
+conflict_2_way time 6222.208496(ms)
+conflict_4_way time 11784.026367(ms)
+conflict_8_way time 22991.486328(ms)
 ```
 
 A100 output
 
 ```
+#float
 warm up
 finish warm up
-no_conflict: time 663.738647(ms)
-boardcast time 618.054443(ms)
-multicast time 618.685181(ms)
-conflict_2_way time 1160.160400(ms)
-conflict_4_way time 2249.523438(ms)
-conflict_8_way time 4430.911133(ms)
-conflict_16_way time 8788.954102(ms)
+no_conflict: time 658.384644(ms)
+boardcast time 620.410828(ms)
+multicast time 620.533875(ms)
+conflict_2_way time 1159.872314(ms)
+conflict_4_way time 2249.229492(ms)
+conflict_8_way time 4429.085938(ms)
+
+#float2
+warm up
+finish warm up
+no_conflict: time 1290.588135(ms)
+boardcast time 688.848572(ms)
+multicast time 688.986755(ms)
+conflict_2_way time 2318.283447(ms)
+conflict_4_way time 4495.824219(ms)
+conflict_8_way time 8858.317383(ms)
+
+#float4
+warm up
+finish warm up
+no_conflict: time 2575.201904(ms)
+boardcast time 1370.865723(ms)
+multicast time 1370.972778(ms)
+conflict_2_way time 4640.534180(ms)
+conflict_4_way time 8996.726562(ms)
+conflict_8_way time 17716.828125(ms
 ```
 
 ## ROCM
@@ -44,15 +84,35 @@ hipcc test_hip.cpp -std=c++17 -O3
 
 MI50 plus output
 ```
+#float
 warm up
 finish warm up
-no_conflict: time 1338.479614(ms)
-boardcast time 1338.416870(ms)
-multicast time 1338.822510(ms)
-conflict_2_way time 2209.756592(ms)
-conflict_4_way time 4279.312500(ms)
-conflict_8_way time 8420.298828(ms)
-conflict_16_way time 16683.246094(ms)
+no_conflict: time 1335.369141(ms)
+boardcast time 1329.768433(ms)
+multicast time 1329.622192(ms)
+conflict_2_way time 2218.166504(ms)
+conflict_4_way time 4279.983887(ms)
+conflict_8_way time 8421.637695(ms)
+
+#float2
+warm up
+finish warm up
+no_conflict: time 2474.466309(ms)
+boardcast time 2475.849121(ms)
+multicast time 2475.404053(ms)
+conflict_2_way time 4441.515137(ms)
+conflict_4_way time 8558.571289(ms)
+conflict_8_way time 16831.074219(ms)
+
+#float4
+warm up
+finish warm up
+no_conflict: time 4612.925293(ms)
+boardcast time 4616.236816(ms)
+multicast time 4614.916504(ms)
+conflict_2_way time 8868.114258(ms)
+conflict_4_way time 17139.820312(ms)
+conflict_8_way time 17139.826172(ms)
 ```
 
 ## ASM
