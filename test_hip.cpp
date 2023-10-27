@@ -5,7 +5,7 @@
 // Size of array
 #define N 256 * 80 * 16
 
-#define WARM_UP_LOOP 1000
+#define WARM_UP_LOOP 200
 #define KERNEL_LOOP 100
 #define KERNEL_INNER_REPEAT 10000
 
@@ -58,9 +58,10 @@ template <int choose> __global__ void add_vectors(float *a) {
         sum += shm[j][((threadIdx.x % 4) * 32) + threadIdx.x / 4];
       } else if constexpr (choose == conflict_8_way) {
         sum += shm[j][((threadIdx.x % 8) * 32) + threadIdx.x / 8];
-      } else if constexpr (choose == conflict_16_way) {
-        sum += shm[j][((threadIdx.x % 16) * 32) + threadIdx.x / 16];
-      }
+      } 
+      // else if constexpr (choose == conflict_16_way) {
+      //   sum += shm[j][((threadIdx.x % 16) * 32) + threadIdx.x / 16];
+      // }
     }
     shm[i % ITEMS][threadIdx.x] = sum;
   }
@@ -165,16 +166,16 @@ int main() {
   hipEventElapsedTime(&time_elapsed, start, stop); // 计算时间差
   printf("conflict_8_way time %f(ms)\n", time_elapsed);
 
-  hipMemcpy(d_A, A, bytes, hipMemcpyHostToDevice);
-  hipEventRecord(start, 0);
-  for (int i = 0; i < KERNEL_LOOP; i++) {
-    add_vectors<conflict_16_way><<<blk_in_grid, thr_per_blk>>>(d_A);
-  }
-  hipEventRecord(stop, 0);
-  hipEventSynchronize(start); // Waits for an event to complete.
-  hipEventSynchronize(stop); // Waits for an event to complete.Record之前的任务
-  hipEventElapsedTime(&time_elapsed, start, stop); // 计算时间差
-  printf("conflict_16_way time %f(ms)\n", time_elapsed);
+  // hipMemcpy(d_A, A, bytes, hipMemcpyHostToDevice);
+  // hipEventRecord(start, 0);
+  // for (int i = 0; i < KERNEL_LOOP; i++) {
+  //   add_vectors<conflict_16_way><<<blk_in_grid, thr_per_blk>>>(d_A);
+  // }
+  // hipEventRecord(stop, 0);
+  // hipEventSynchronize(start); // Waits for an event to complete.
+  // hipEventSynchronize(stop); // Waits for an event to complete.Record之前的任务
+  // hipEventElapsedTime(&time_elapsed, start, stop); // 计算时间差
+  // printf("conflict_16_way time %f(ms)\n", time_elapsed);
 
   hipMemcpy(A, d_A, bytes, hipMemcpyDeviceToHost);
 
