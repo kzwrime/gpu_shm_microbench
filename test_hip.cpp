@@ -19,17 +19,29 @@ enum share_read {
   conflict_16_way
 };
 
+#define MTYPE float
+#define MAKE_MTYPE(x) (x)
+#define GET_MTYPE(x) (x)
+
+// #define MTYPE float2
+// #define MAKE_MTYPE(x) make_float2(x, x)
+// #define GET_MTYPE(v) (v.x)
+
+// #define MTYPE float4
+// #define MAKE_MTYPE(x) make_float4(x, x, x, x)
+// #define GET_MTYPE(v) (v.x)
+
 // Kernel
 template <int choose> __global__ void add_vectors(float *a) {
   const int ITEMS = 8;
-  __shared__ float shm[ITEMS][512];
+  __shared__ MTYPE shm[ITEMS][256];
   int id = blockDim.x * blockIdx.x + threadIdx.x;
 
   for (int i = 0; i < ITEMS; i++)
-    shm[i][threadIdx.x] = a[id] * i * threadIdx.x;
+    shm[i][threadIdx.x] = MAKE_MTYPE(a[id]);
 
   for (int i = 0; i < KERNEL_INNER_REPEAT; i++) {
-    float sum = 0;
+    MTYPE sum = MAKE_MTYPE(0);
     for (int j = 0; j < ITEMS; j++) {
       if constexpr (choose == no_conflict) {
         sum += shm[j][(threadIdx.x + 1) % 256];
@@ -53,7 +65,7 @@ template <int choose> __global__ void add_vectors(float *a) {
     shm[i % ITEMS][threadIdx.x] = sum;
   }
 
-  a[id] = shm[0][threadIdx.x];
+  a[id] = GET_MTYPE(shm[0][threadIdx.x]);
 }
 
 // Main program
