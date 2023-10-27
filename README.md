@@ -4,7 +4,9 @@ This benchmark mainly reflects the reading bandwidth of shared memory.
 
 ## Overview
 
-The tables show the time(ms) cost of each case.
+The benchmark results are given in milliseconds and show the time taken for each case. The cases include different memory access patterns such as normal, multicast, broadcast, and conflict scenarios. The conflict scenarios involve accessing shared memory with different indices based on thread ID and using different levels of conflict (2-way, 4-way, 8-way, 16-way).
+
+Each table represents a different data type: float(b32), float2(b64), float4(b128). The data type indicates the size of each element in shared memory.
 
 float(b32)
 
