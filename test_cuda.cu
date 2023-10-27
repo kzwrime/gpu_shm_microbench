@@ -5,6 +5,10 @@
 // Size of array
 #define N 256 * 80 * 16
 
+#define WARM_UP_LOOP 1000
+#define KERNEL_LOOP 100
+#define KERNEL_INNER_REPEAT 10000
+
 enum share_read {
   no_conflict,
   boardcast,
@@ -24,7 +28,7 @@ template <int choose> __global__ void add_vectors(float *a) {
   for (int i = 0; i < ITEMS; i++)
     shm[i][threadIdx.x] = a[id] * i * threadIdx.x;
 
-  for (int i = 0; i < 10000; i++) {
+  for (int i = 0; i < KERNEL_INNER_REPEAT; i++) {
     float sum = 0;
     for (int j = 0; j < ITEMS; j++) {
       if constexpr (choose == no_conflict) {
@@ -72,7 +76,7 @@ int main() {
 
   printf("warm up\n");
   // warm up
-  for (int i = 0; i < 1000; i++) {
+  for (int i = 0; i < WARM_UP_LOOP; i++) {
     add_vectors<no_conflict><<<blk_in_grid, thr_per_blk>>>(d_A);
   }
   cudaDeviceSynchronize();
@@ -85,7 +89,7 @@ int main() {
   cudaEventCreate(&stop);
 
   cudaEventRecord(start, 0);
-  for (int i = 0; i < 100; i++) {
+  for (int i = 0; i < KERNEL_LOOP; i++) {
     add_vectors<no_conflict><<<blk_in_grid, thr_per_blk>>>(d_A);
   }
   cudaEventRecord(stop, 0);
@@ -96,7 +100,7 @@ int main() {
   cudaMemcpy(d_A, A, bytes, cudaMemcpyHostToDevice);
 
   cudaEventRecord(start, 0);
-  for (int i = 0; i < 100; i++) {
+  for (int i = 0; i < KERNEL_LOOP; i++) {
     add_vectors<boardcast><<<blk_in_grid, thr_per_blk>>>(d_A);
   }
   cudaEventRecord(stop, 0);
@@ -107,7 +111,7 @@ int main() {
 
   cudaMemcpy(d_A, A, bytes, cudaMemcpyHostToDevice);
   cudaEventRecord(start, 0);
-  for (int i = 0; i < 100; i++) {
+  for (int i = 0; i < KERNEL_LOOP; i++) {
     add_vectors<multicast><<<blk_in_grid, thr_per_blk>>>(d_A);
   }
   cudaEventRecord(stop, 0);
@@ -118,7 +122,7 @@ int main() {
 
   cudaMemcpy(d_A, A, bytes, cudaMemcpyHostToDevice);
   cudaEventRecord(start, 0);
-  for (int i = 0; i < 100; i++) {
+  for (int i = 0; i < KERNEL_LOOP; i++) {
     add_vectors<conflict_2_way><<<blk_in_grid, thr_per_blk>>>(d_A);
   }
   cudaEventRecord(stop, 0);
@@ -129,7 +133,7 @@ int main() {
 
   cudaMemcpy(d_A, A, bytes, cudaMemcpyHostToDevice);
   cudaEventRecord(start, 0);
-  for (int i = 0; i < 100; i++) {
+  for (int i = 0; i < KERNEL_LOOP; i++) {
     add_vectors<conflict_4_way><<<blk_in_grid, thr_per_blk>>>(d_A);
   }
   cudaEventRecord(stop, 0);
@@ -140,7 +144,7 @@ int main() {
 
   cudaMemcpy(d_A, A, bytes, cudaMemcpyHostToDevice);
   cudaEventRecord(start, 0);
-  for (int i = 0; i < 100; i++) {
+  for (int i = 0; i < KERNEL_LOOP; i++) {
     add_vectors<conflict_8_way><<<blk_in_grid, thr_per_blk>>>(d_A);
   }
   cudaEventRecord(stop, 0);
@@ -151,7 +155,7 @@ int main() {
 
   cudaMemcpy(d_A, A, bytes, cudaMemcpyHostToDevice);
   cudaEventRecord(start, 0);
-  for (int i = 0; i < 100; i++) {
+  for (int i = 0; i < KERNEL_LOOP; i++) {
     add_vectors<conflict_16_way><<<blk_in_grid, thr_per_blk>>>(d_A);
   }
   cudaEventRecord(stop, 0);
