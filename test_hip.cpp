@@ -50,7 +50,7 @@ template <int choose> __global__ void add_vectors(float *a) {
         sum += shm[j][((threadIdx.x % 16) * 32) + threadIdx.x / 16];
       }
     }
-    shm[i][threadIdx.x] = sum;
+    shm[i % ITEMS][threadIdx.x] = sum;
   }
 
   a[id] = shm[0][threadIdx.x];
