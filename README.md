@@ -1,6 +1,6 @@
 # gpu_shm_microbench
 
-default items_per_thread=8
+Default items_per_thread=8, which means 8 read + 8 add + 1 write, mainly reflects the reading performance of shared memory.
 
 ## Overview
 
