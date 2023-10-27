@@ -5,7 +5,7 @@
 // Size of array
 #define N 256 * 80 * 16
 
-#define WARM_UP_LOOP 1000
+#define WARM_UP_LOOP 200
 #define KERNEL_LOOP 100
 #define KERNEL_INNER_REPEAT 10000
 
@@ -19,17 +19,51 @@ enum share_read {
   conflict_16_way
 };
 
+#define HOST_DEVICE_INLINE __host__ __device__ __forceinline__
+
+HOST_DEVICE_INLINE float2 operator+(const float2 &u, const float2 &v) {
+  return make_float2(u.x + v.x, u.y + v.y);
+}
+
+HOST_DEVICE_INLINE void operator+=(float2 &u, const float2 &v) {
+  u.x += v.x;
+  u.y += v.y;
+}
+
+HOST_DEVICE_INLINE float4 operator+(const float4 &u, const float4 &v) {
+  return make_float4(u.x + v.x, u.y + v.y, u.z + v.z, u.w + v.w);
+}
+
+HOST_DEVICE_INLINE void operator+=(float4 &u, const float4 &v) {
+  u.x += v.x;
+  u.y += v.y;
+  u.z += v.z;
+  u.w += v.w;
+}
+
+#define MTYPE float
+#define MAKE_MTYPE(x) (x)
+#define GET_MTYPE(x) (x)
+
+// #define MTYPE float2
+// #define MAKE_MTYPE(x) make_float2(x, x)
+// #define GET_MTYPE(v) (v.x)
+
+// #define MTYPE float4
+// #define MAKE_MTYPE(x) make_float4(x, x, x, x)
+// #define GET_MTYPE(v) (v.x)
+
 // Kernel
 template <int choose> __global__ void add_vectors(float *a) {
   const int ITEMS = 8;
-  __shared__ float shm[ITEMS][512];
+  __shared__ MTYPE shm[ITEMS][256]; // may be no enough for conflict_16_way
   int id = blockDim.x * blockIdx.x + threadIdx.x;
 
   for (int i = 0; i < ITEMS; i++)
-    shm[i][threadIdx.x] = a[id] * i * threadIdx.x;
+    shm[i][threadIdx.x] = MAKE_MTYPE(a[id]);
 
   for (int i = 0; i < KERNEL_INNER_REPEAT; i++) {
-    float sum = 0;
+    MTYPE sum = MAKE_MTYPE(0);
     for (int j = 0; j < ITEMS; j++) {
       if constexpr (choose == no_conflict) {
         sum += shm[j][(threadIdx.x + 1) % 256];
@@ -46,14 +80,15 @@ template <int choose> __global__ void add_vectors(float *a) {
         sum += shm[j][((threadIdx.x % 4) * 32) + threadIdx.x / 4];
       } else if constexpr (choose == conflict_8_way) {
         sum += shm[j][((threadIdx.x % 8) * 32) + threadIdx.x / 8];
-      } else if constexpr (choose == conflict_16_way) {
-        sum += shm[j][((threadIdx.x % 16) * 32) + threadIdx.x / 16];
       }
+      // else if constexpr (choose == conflict_16_way) {
+      //   sum += shm[j][((threadIdx.x % 16) * 32) + threadIdx.x / 16];
+      // }
     }
     shm[i % ITEMS][threadIdx.x] = sum;
   }
 
-  a[id] = shm[0][threadIdx.x];
+  a[id] = GET_MTYPE(shm[0][threadIdx.x]);
 }
 
 // Main program
@@ -153,16 +188,16 @@ int main() {
   cudaEventElapsedTime(&time_elapsed, start, stop); // 计算时间差
   printf("conflict_8_way time %f(ms)\n", time_elapsed);
 
-  cudaMemcpy(d_A, A, bytes, cudaMemcpyHostToDevice);
-  cudaEventRecord(start, 0);
-  for (int i = 0; i < KERNEL_LOOP; i++) {
-    add_vectors<conflict_16_way><<<blk_in_grid, thr_per_blk>>>(d_A);
-  }
-  cudaEventRecord(stop, 0);
-  cudaEventSynchronize(start); // Waits for an event to complete.
-  cudaEventSynchronize(stop); // Waits for an event to complete.Record之前的任务
-  cudaEventElapsedTime(&time_elapsed, start, stop); // 计算时间差
-  printf("conflict_16_way time %f(ms)\n", time_elapsed);
+  // cudaMemcpy(d_A, A, bytes, cudaMemcpyHostToDevice);
+  // cudaEventRecord(start, 0);
+  // for (int i = 0; i < KERNEL_LOOP; i++) {
+  //   add_vectors<conflict_16_way><<<blk_in_grid, thr_per_blk>>>(d_A);
+  // }
+  // cudaEventRecord(stop, 0);
+  // cudaEventSynchronize(start); // Waits for an event to complete.
+  // cudaEventSynchronize(stop); // Waits for an event to complete.Record之前的任务
+  // cudaEventElapsedTime(&time_elapsed, start, stop); // 计算时间差
+  // printf("conflict_16_way time %f(ms)\n", time_elapsed);
 
   cudaMemcpy(A, d_A, bytes, cudaMemcpyDeviceToHost);
 
